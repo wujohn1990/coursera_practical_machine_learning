@@ -1,0 +1,124 @@
+---
+title: "Coursera - Practical Machine Learning - Course Project"
+author:
+  - Qiong Wu
+output: html_notebook
+---
+
+This report is the course project for *Coursera* course *Practical Machine Learning*.
+
+# Background
+
+In this project we'll use data about personal acitivity to predict the manner in which barbell lift participants did their exercises. The data is from [here](http://groupware.les.inf.puc-rio.br/har)
+
+# Data Processing
+
+```{r}
+data_train = read.csv("pml-training.csv")
+```
+We will read in the data and do some data cleaning before we go to the model training step. 
+First, remove columns that have too many NA or NULL values.
+
+```{r}
+# remove columns that has too many NAs
+# i.e. over 10% of the data is NA or ""
+num_nas = apply(data_train,2,function(x) sum(is.na(x)))
+num_nulls = apply(data_train,2,function(x) sum(x==""))
+columns = names(data_train)[num_nas<nrow(data_train)*0.9 & num_nulls<nrow(data_train)*0.9]
+#sds = apply(data_train[,columns],2,function(x) sd(as.numeric(x)))
+```
+
+Then we noticed that out of the remaining feature columns, the first few columns are not useful as they are indices, names, timestamps, window flags
+
+```{r}
+# the first few columns are also not useful
+# as they are indices, names, timestamps, window flags
+columns = setdiff(columns,names(data_train)[1:7])
+
+# so the data is
+data_train = data_train[,columns]
+```
+
+
+# Prediction Model Training 
+
+Now we have cleaned our datset, we can perform our model training.
+
+We will try different classifiers (see [here](https://topepo.github.io/caret/available-models.html) for all the available models caret package provide) to predict the "classe" target variable in the dataset.
+
+Let's create k-fold dataset for cross validation first.
+
+```{r}
+suppressPackageStartupMessages(library(caret))
+# set up k-fold cross validation
+set.seed(42)
+cv_control<- trainControl(method="cv", number=5, savePredictions = TRUE)
+# prepross data???
+# e.g. center and scale???
+```
+
+Then let's try different classifiers.
+
+In this report, we'll try CART, Random Forest, K Nearest Neighbors and Stochastic Gradient Boosting.
+
+### 1 CART
+```{r}
+cart_model <- train(classe~., data=data_train, trControl=cv_control, method="rpart")
+confusionMatrix(predict(cart_model,newdata = data_train),data_train$classe)
+```
+
+
+### 2 Random Forest
+```{r}
+rf_model <- train(classe~., data=data_train, trControl=cv_control, method="ranger",verbose=F)
+confusionMatrix(predict(rf_model,newdata = data_train),data_train$classe)
+
+```
+
+### 3 K Nearest Neighbors
+```{r}
+knn_model <- train(classe~., data=data_train, trControl=cv_control, method="knn")
+confusionMatrix(predict(knn_model,newdata = data_train),data_train$classe)
+
+```
+
+
+
+### 4 Stochastic Gradient Boosting
+```{r}
+gbm_model <- train(classe~., data=data_train, trControl=cv_control, method="gbm",verbose = F)
+confusionMatrix(predict(gbm_model,newdata = data_train),data_train$classe)
+
+```
+
+
+As we can see from the 5-folded cross validatd model training, the random forest does the best, which 100% accuracy and (0.9998, 1) on the 95% confidence interval. So we'll choose the random forest model to predict on our dataset.
+
+# Prediction on the test set
+
+```{r}
+data_test = read.csv("pml-testing.csv")
+# so the data is
+feature_columns = setdiff(columns,'classe')
+data_test = data_test[,feature_columns]
+# do the predictions
+test_preds = predict(rf_model,data_test)
+```
+
+So the predictions are:
+
+```{r}
+library(knitr)
+test_preds=data.frame(index=1:length(test_preds),classe=test_preds)
+kable(test_preds)
+```
+
+
+# Reference
+1. Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6.
+
+
+
+
+
+
